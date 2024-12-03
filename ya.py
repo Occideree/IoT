@@ -3,8 +3,23 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QRadioButton, QWidget, QSlider, QSpinBox
 import time
 import random
+import sys
+import os
 
 
+
+def resource_path(relative_path):
+    """Получение абсолютного пути к ресурсу в упакованном приложении"""
+    try:
+        # Если мы запустили .exe файл
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS  # Местоположение временного каталога PyInstaller
+        else:
+            base_path = os.path.abspath(".")  # Местоположение текущего каталога для исходных файлов
+        return os.path.join(base_path, relative_path)
+    except Exception as e:
+        print(f"Error getting resource path: {e}")
+        return relative_path
 class IoTDeviceSimulator(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -161,9 +176,9 @@ class IoTDeviceSimulator(QMainWindow):
     def update_pump_icon(self):
         """Обновляет иконку насоса."""
         if self.pump_state:
-            pixmap = QPixmap("drop.png")  # Капелька
+            pixmap = QPixmap(resource_path("images/drop.png"))  # Капелька
         else:
-            pixmap = QPixmap("drop_crossed.png")  # Перечёркнутая капелька
+            pixmap = QPixmap(resource_path("images/drop_crossed.png")) # Перечёркнутая капелька
         self.pump_icon_label.setPixmap(pixmap.scaled(50, 50, Qt.KeepAspectRatio))
 
 if __name__ == "__main__":
