@@ -142,7 +142,7 @@ class IoTDeviceSimulator(QMainWindow):
 
     def pump_water(self):
         """Имитирует подачу воды насосом."""
-        moisture_increase = (self.update_interval / 1000) * 5
+        moisture_increase = (self.update_interval / 1000) * 2
         self.soil_moisture += moisture_increase
         self.soil_moisture = min(self.soil_moisture, 100)
         self.moisture_label.setText(f"Влажность почвы: {self.soil_moisture:.1f}%")
@@ -165,7 +165,6 @@ class IoTDeviceSimulator(QMainWindow):
         else:
             pixmap = QPixmap("drop_crossed.png")  # Перечёркнутая капелька
         self.pump_icon_label.setPixmap(pixmap.scaled(50, 50, Qt.KeepAspectRatio))
-
 
 if __name__ == "__main__":
     app = QApplication([])
