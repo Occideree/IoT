@@ -37,7 +37,7 @@ class IoTDeviceSimulator(QMainWindow):
 
         # Таймер для работы насоса
         self.pump_timer = QTimer()
-        self.pump_timer.timeout.connect(self.pump_water)
+
 
         # Графический интерфейс
         self.init_ui()
@@ -176,17 +176,7 @@ class IoTDeviceSimulator(QMainWindow):
             self.pump_button.setText("Включить полив")
             self.pump_timer.stop()
 
-    def pump_water(self):
-        print(3)
-        """Имитирует подачу воды насосом."""
-        moisture_increase = (self.update_interval / 1000) * 2
-        self.soil_moisture += moisture_increase
-        self.soil_moisture = min(self.soil_moisture, 100)
-        self.moisture_label.setText(f"Влажность почвы: {self.soil_moisture:.1f}%")
-        self.moisture_slider.setValue(int(self.soil_moisture * 10))
 
-        if self.mode == "Automatic" and self.soil_moisture >= 60:
-            self.stop_pump()
 
     def set_update_interval(self):
         """Устанавливает интервал обновления данных."""

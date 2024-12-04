@@ -18,6 +18,8 @@ class MQTTClient:
         self.client.connect(self.server, self.port, keepalive=60)
         self.client.loop_start()
 
+    def disconnect(self):
+        self.client.disconnect()
     def on_connect(self, client, userdata, flags, rc):
         """Обработчик события подключения."""
         if rc == 0:
