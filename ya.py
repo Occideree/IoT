@@ -1,25 +1,11 @@
+import json
+import time
+import random
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QLabel, QRadioButton, QWidget, QSlider, QSpinBox
-import time
-import random
-import sys
-import os
-
-
-
-def resource_path(relative_path):
-    """Получение абсолютного пути к ресурсу в упакованном приложении"""
-    try:
-        # Если мы запустили .exe файл
-        if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS  # Местоположение временного каталога PyInstaller
-        else:
-            base_path = os.path.abspath(".")  # Местоположение текущего каталога для исходных файлов
-        return os.path.join(base_path, relative_path)
-    except Exception as e:
-        print(f"Error getting resource path: {e}")
-        return relative_path
+from mqtt_part import MQTTClient  # Убедитесь, что этот файл доступен и содержит корректную логику
+from utils import resource_path
 class IoTDeviceSimulator(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -30,9 +16,19 @@ class IoTDeviceSimulator(QMainWindow):
         self.soil_moisture = 50.0  # Уровень влажности почвы (в %)
         self.pump_state = False  # Состояние насоса
         self.mode = "Manual"  # Режим работы ("Manual" или "Automatic")
-        self.update_interval = 1000  # Интервал обновления датчиков (мс)
+        self.update_interval = 10000  # Интервал обновления датчиков (мс)
         self.last_update_time = time.time()  # Последнее обновление времени
         self.moisture_trend = -0.2  # Тренд изменения влажности
+
+        # Настройка MQTT
+        self.mqtt_client = MQTTClient(
+            server="test.mosquitto.org",
+            port=1883,
+            topic_sensors="iot/sprinkler/sensors",
+            topic_commands="iot/sprinkler/commands",
+            message_handler=self.handle_MQTT_message
+        )
+        self.mqtt_client.connect()
 
         # Таймер для обновления датчиков
         self.sensor_timer = QTimer()
@@ -103,22 +99,38 @@ class IoTDeviceSimulator(QMainWindow):
         elapsed_time = (current_time - self.last_update_time) * 1000  # Время с последнего обновления в мс
 
         if elapsed_time >= self.update_interval:
-            if not self.pump_state:
+            if self.pump_state:
+                # Когда насос включен, увеличиваем влажность
+                moisture_increase = (self.update_interval / 1000) * 2  # Дельта увеличения влажности
+                self.soil_moisture += moisture_increase
+                self.soil_moisture = min(self.soil_moisture, 100)  # Ограничиваем максимум 100%
+            else:
+                # Когда насос выключен, уменьшаем влажность
                 self.soil_moisture += self.moisture_trend * (elapsed_time / 1000) + random.uniform(-0.05, 0.05)
                 self.soil_moisture = max(0, min(self.soil_moisture, 100))  # Ограничиваем диапазон 0-100
 
             self.last_update_time = current_time
 
+            # Обновляем отображение влажности и слайдер
             self.moisture_label.setText(f"Влажность почвы: {self.soil_moisture:.1f}%")
             self.moisture_slider.setValue(int(self.soil_moisture * 10))
 
             if self.mode == "Automatic" and not self.pump_state and self.soil_moisture < 30:
                 self.start_pump()
 
+            # Публикуем данные в MQTT
+            sensor_data = {
+                "soil_moisture": self.soil_moisture,
+                "pump_state": self.pump_state,
+                "mode": self.mode
+            }
+            self.mqtt_client.publish(self.mqtt_client.topic_sensors, sensor_data)
+
     def toggle_pump(self):
         """Включает/выключает насос вручную."""
         if self.mode == "Manual":
             if not self.pump_state:
+                print(1)
                 self.start_pump()
             else:
                 self.stop_pump()
@@ -128,15 +140,22 @@ class IoTDeviceSimulator(QMainWindow):
         self.soil_moisture = self.moisture_slider.value() / 10
         self.moisture_label.setText(f"Влажность почвы: {self.soil_moisture:.1f}%")
 
-    def set_manual_mode(self):
+    def set_manual_mode(self, command=""):
         """Устанавливает ручной режим."""
         if self.manual_mode_button.isChecked():
             self.mode = "Manual"
             self.stop_pump()
+        if command == "Manual":
+            self.mode = "Manual"
+            self.stop_pump()
+            self.manual_mode_button.setChecked(True)
 
-    def set_auto_mode(self):
+    def set_auto_mode(self, command = ""):
         """Устанавливает автоматический режим."""
         if self.auto_mode_button.isChecked():
+            self.mode = "Automatic"
+        if command == "Automatic":
+            self.auto_mode_button.setChecked(True)
             self.mode = "Automatic"
 
     def start_pump(self):
@@ -146,6 +165,8 @@ class IoTDeviceSimulator(QMainWindow):
             self.update_pump_icon()
             self.pump_button.setText("Выключить полив")
             self.pump_timer.start(self.update_interval)
+            print(2)
+
 
     def stop_pump(self):
         """Останавливает насос."""
@@ -156,6 +177,7 @@ class IoTDeviceSimulator(QMainWindow):
             self.pump_timer.stop()
 
     def pump_water(self):
+        print(3)
         """Имитирует подачу воды насосом."""
         moisture_increase = (self.update_interval / 1000) * 2
         self.soil_moisture += moisture_increase
@@ -180,6 +202,24 @@ class IoTDeviceSimulator(QMainWindow):
         else:
             pixmap = QPixmap(resource_path("images/drop_crossed.png")) # Перечёркнутая капелька
         self.pump_icon_label.setPixmap(pixmap.scaled(50, 50, Qt.KeepAspectRatio))
+
+    def handle_MQTT_message(self, command):
+        """Обрабатывает команды, полученные через MQTT."""
+
+        if command == "\"Manual\"":
+            self.set_manual_mode(command="Manual")
+        elif command == "\"Automatic\"":
+            self.set_auto_mode(command="Automatic")
+        elif command == "\"StartPump\"" :
+            if self.mode=="Automatic":
+                self.mqtt_client.publish("iot/sprinkler/commands", "The command cannot be executed, the watering mode is set to auto")
+                return
+            self.toggle_pump()
+        elif command == "\"StopPump\"":
+            if self.mode=="Automatic":
+                self.mqtt_client.publish("iot/sprinkler/commands", "The command cannot be executed, the watering mode is set to auto")
+                return
+            self.toggle_pump()
 
 if __name__ == "__main__":
     app = QApplication([])
